@@ -10,6 +10,8 @@ import io.datacraft.core.connection.ConnectionProfile;
 import io.datacraft.core.connection.SavedConnection;
 import io.datacraft.core.metadata.*;
 import io.datacraft.core.query.*;
+import io.datacraft.sql.*;
+import io.datacraft.core.connection.DatabaseKind;
 
 /** Schedules application services without depending on JavaFX or JDBC. */
 public final class DesktopController {
@@ -19,6 +21,22 @@ public final class DesktopController {
     private final ExecutorService cancelWorker = Executors.newSingleThreadExecutor(r -> new Thread(r, "datacraft-cancel"));
     private final AtomicReference<QueryCancellation> active = new AtomicReference<>();
     private CompletableFuture<Void> shutdown;
+    private final SqlEngine sqlEngine = new SqlEngine();
+    private final ExecutorService analysisWorker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(40), r -> new Thread(r, "datacraft-sql-analysis"));
+    private volatile SchemaSnapshot metadata = SchemaSnapshot.EMPTY;
+
+    public SchemaSnapshot metadata() { return metadata; }
+    public CompletableFuture<SqlAnalysis> analyze(String sql, DatabaseKind kind) {
+        return CompletableFuture.supplyAsync(() -> sqlEngine.analyze(sql, kind), analysisWorker);
+    }
+    public CompletableFuture<SqlCompletion> complete(String sql, int caret, DatabaseKind kind) {
+        var snapshot = metadata;
+        return CompletableFuture.supplyAsync(() -> sqlEngine.complete(sql, caret, kind, snapshot), analysisWorker);
+    }
+    private List<String> cacheSchemas(List<String> schemas) {
+        metadata = new SchemaSnapshot(schemas, List.of(), java.util.Map.of()); return schemas;
+    }
 
     public DesktopController(WorkspaceService workspace) { this(workspace, null); }
     public DesktopController(WorkspaceService workspace, io.datacraft.core.application.ConnectionProfiles profiles) {
@@ -57,7 +75,7 @@ public final class DesktopController {
                     }
                     if (password.length == 0 && profile.storePassword() && service.canStorePassword())
                         stored = service.password(profile.id(), profile.settings());
-                    return workspace.connect(profile.settings(), stored == null ? password : stored);
+                    return cacheSchemas(workspace.connect(profile.settings(), stored == null ? password : stored));
                 } finally {
                     Arrays.fill(password, '\0');
                     if (stored != null) Arrays.fill(stored, '\0');
@@ -72,13 +90,28 @@ public final class DesktopController {
         }, worker);
     }
     public CompletableFuture<List<String>> connect(ConnectionProfile settings, char[] password) {
-        try { return submit(() -> workspace.connect(settings, password)); }
+        try { return submit(() -> cacheSchemas(workspace.connect(settings, password))); }
         catch (RejectedExecutionException failure) { Arrays.fill(password, '\0'); throw failure; }
     }
     public java.util.Set<io.datacraft.core.connection.DatabaseKind> availableDatabases() { return workspace.availableDatabases(); }
-    public CompletableFuture<List<String>> schemas() { return submit(workspace::schemas); }
-    public CompletableFuture<List<RelationMetadata>> relations(String schema) { return submit(() -> workspace.relations(schema)); }
-    public CompletableFuture<List<ColumnMetadata>> columns(QualifiedName relation) { return submit(() -> workspace.columns(relation)); }
+    public CompletableFuture<List<String>> schemas() { return submit(() -> cacheSchemas(workspace.schemas())); }
+    public CompletableFuture<List<RelationMetadata>> relations(String schema) {
+        return submit(() -> {
+            var values = workspace.relations(schema);
+            var relations = new java.util.ArrayList<>(metadata.relations());
+            relations.removeIf(value -> value.name().schema().equals(schema)); relations.addAll(values);
+            var columns = new java.util.HashMap<>(metadata.columns());
+            columns.keySet().removeIf(name -> name.schema().equals(schema));
+            metadata = new SchemaSnapshot(metadata.schemas(), relations, columns); return values;
+        });
+    }
+    public CompletableFuture<List<ColumnMetadata>> columns(QualifiedName relation) {
+        return submit(() -> {
+            var values = workspace.columns(relation);
+            var columns = new java.util.HashMap<>(metadata.columns()); columns.put(relation, values);
+            metadata = new SchemaSnapshot(metadata.schemas(), metadata.relations(), columns); return values;
+        });
+    }
     public CompletableFuture<QueryResult> query(QueryRequest request) {
         var signal = new QueryCancellation();
         if (!active.compareAndSet(null, signal)) throw new IllegalStateException("A query is already active.");
@@ -93,13 +126,14 @@ public final class DesktopController {
         var signal = active.get();
         if (signal != null) cancelWorker.execute(signal::cancel);
     }
-    public CompletableFuture<Void> disconnect() { return submit(() -> { workspace.close(); return null; }); }
+    public CompletableFuture<Void> disconnect() { return submit(() -> { workspace.close(); metadata = SchemaSnapshot.EMPTY; return null; }); }
     public synchronized CompletableFuture<Void> shutdown() {
         if (shutdown != null) return shutdown;
         cancel();
         shutdown = disconnect().whenComplete((ignored, failure) -> {
             worker.shutdown();
             cancelWorker.shutdown();
+            analysisWorker.shutdownNow(); sqlEngine.close(); metadata = SchemaSnapshot.EMPTY;
         });
         return shutdown;
     }

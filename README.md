@@ -4,7 +4,7 @@ DataCraft is an open-source database IDE with PostgreSQL, SQLite, MySQL, and Mar
 Its primary implementation language is **Java**. It is a modular Java
 platform whose desktop application is one client of a UI-independent core.
 
-The core owns database metadata, SQL intelligence, query execution,
+The platform owns database metadata, SQL intelligence, query execution,
 workspace services, and safety policies. Database adapters implement
 capability-based integration contracts. Desktop components consume
 application services rather than implementing database business logic.
@@ -63,13 +63,41 @@ When intentionally updating dependency versions, regenerate and review
 the module lockfiles:
 
 ```sh
-bash ./gradlew :datacraft-core:dependencies :datacraft-postgresql:dependencies :datacraft-sqlite:dependencies :datacraft-mysql:dependencies :datacraft-platform:dependencies :datacraft-desktop:dependencies --write-locks
+bash ./gradlew :datacraft-core:dependencies :datacraft-postgresql:dependencies :datacraft-sqlite:dependencies :datacraft-mysql:dependencies :datacraft-platform:dependencies :datacraft-sql:dependencies :datacraft-desktop:dependencies --write-locks
 ```
 
 Use `gradlew.bat` on Windows. Run the build again after reviewing the changes.
 
 JavaFX native classifiers follow the build
 machine's platform; distribution archives must be built for their target OS.
+
+## SQL intelligence
+
+Each query tab analyzes SQL locally in the background using JSQLParser 5.4.
+The diagnostics below the editor report incomplete or unsupported syntax.
+Open **SQL structure** to inspect the parsed AST; selecting a node selects its
+source text in the editor. Analysis is advisory: the database and existing
+read-only execution policies remain authoritative.
+
+Press **Ctrl+Space** (or Command+Space where the OS allows it) for completion.
+Use Up/Down to choose, Enter/Tab to insert, or Escape to dismiss. Suggestions
+include keywords, namespaces, discovered tables/views, and columns resolved
+through table aliases. For example, `SELECT u.email FROM public.users u WHERE u.`
+suggests the cached columns of `users`.
+
+Metadata remains lazy: expand a schema/database in the explorer to load its
+relations, and select a relation to load its columns. Completion uses that
+connection's cached metadata and does not execute user SQL or fetch row data.
+Refresh clears the cache; disconnect clears it, and stale suggestions are
+rejected after edits or metadata changes. No external service receives SQL.
+
+This first slice supports direct table aliases and joins within the current
+SELECT scope. It does not resolve CTE/derived-table output columns, correlated
+outer aliases, or ambiguous unqualified tables across schemas. Unsupported
+vendor syntax can still be submitted to the existing execution pipeline.
+There is no claim of server-equivalent validation, formatting, refactoring,
+semantic error checking, or automatic database-wide introspection.
+See [ADR 0008](docs/adr/0008-sql-intelligence.md) for boundaries and limits.
 
 ## Run the MVP
 
@@ -227,7 +255,11 @@ and credential lifetime details, and [ADR 0007](docs/adr/0007-profiles-and-query
 for saved profiles, optional Windows credentials, and multiple query tabs.
 `datacraft-platform` implements file persistence and native credentials behind
 core interfaces. Write controls, persisted query history, pagination/export,
-completion, and macOS/Linux credential providers are not implemented.
+and macOS/Linux credential providers are not implemented.
+`datacraft-sql` supplies local AST analysis and cached schema/alias-aware
+completion through editor-independent immutable contracts; its runtime
+dependency boundary is checked by the build. See
+[ADR 0008](docs/adr/0008-sql-intelligence.md) for the initial SQL intelligence slice.
 PostgreSQL version-matrix and positive TLS tests remain open.
 See [the foundation plan](docs/foundation-plan.md) for the next deliverables
 and [ADR 0002](docs/adr/0002-foundation-toolchain.md) for technology choices.

@@ -23,6 +23,9 @@ final class QueryPane {
     final Tab tab;
     private final String title;
     private String initialSql;
+    private final VBox intelligence = new VBox();
+    private final VBox editorPanel = new VBox();
+    SqlEditorSupport sqlSupport;
 
     QueryPane(int number, String sql, Consumer<QueryPane> execute, Runnable cancelQuery) {
         title = "Query " + number;
@@ -42,6 +45,13 @@ final class QueryPane {
         editor.textProperty().addListener((ignored, before, after) -> tab.setText(title + (dirty() ? " •" : "")));
     }
     boolean dirty() { return !editor.getText().equals(initialSql); }
+    void enableSqlSupport(DesktopController controller, java.util.function.Supplier<io.datacraft.core.connection.DatabaseKind> kind) {
+        sqlSupport = new SqlEditorSupport(this, controller, kind);
+        intelligence.getChildren().setAll(sqlSupport.diagnostics, sqlSupport.inspector);
+        sqlSupport.inspector.expandedProperty().addListener((ignored, before, expanded) -> editorPanel.setMinHeight(expanded ? 240 : 120));
+    }
+    void close() { if (sqlSupport != null) sqlSupport.close(); }
+    void invalidateAnalysis() { if (sqlSupport != null) sqlSupport.invalidate(); }
     void replaceExample(String sql) {
         if (!dirty()) { initialSql = sql; editor.setText(sql); tab.setText(title); }
     }
@@ -73,9 +83,9 @@ final class QueryPane {
         editor.getStyleClass().add("sql-editor");
         var editorTitle = new Label("QUERY"); editorTitle.getStyleClass().add("section-title");
         var editorSpacer = new Region(); HBox.setHgrow(editorSpacer, Priority.ALWAYS);
-        var shortcut = new Label("Ctrl / ⌘ + Enter to run selection"); shortcut.getStyleClass().add("shortcut-hint");
+        var shortcut = new Label("Ctrl+Space · completion   |   Ctrl / ⌘ + Enter · run"); shortcut.getStyleClass().add("shortcut-hint");
         var editorHeading = new HBox(editorTitle, editorSpacer, shortcut); editorHeading.getStyleClass().add("editor-heading");
-        var editorPanel = new VBox(editorHeading, editor); editorPanel.setMinHeight(80);
+        editorPanel.getChildren().setAll(editorHeading, editor, intelligence); editorPanel.setMinHeight(120);
         VBox.setVgrow(editor, Priority.ALWAYS);
         results.setId("results");
         var emptyResults = new Label("Run a SELECT to see results");

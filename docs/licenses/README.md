@@ -5,6 +5,10 @@ under their original licenses; their jars are not modified.
 
 - pgJDBC 42.7.13: BSD-2-Clause. Notice retained as pgjdbc-LICENSE.
   [Source](https://github.com/pgjdbc/pgjdbc/tree/REL42.7.13).
+- JSQLParser 5.4: Apache-2.0 option selected from its dual license.
+  Unmodified jar; upstream jsqlparser-LICENSE_APACHEV2 and LGPL alternative
+  jsqlparser-LICENSE_LGPLV21 retained.
+  [Source and licensing](https://github.com/JSQLParser/JSqlParser/tree/jsqlparser-5.4).
 - JNA 5.19.1: Apache-2.0 license option selected from its dual license.
   Retained jna-LICENSE, jna-AL2.0, and jna-libffi-LICENSE for the bundled
   native support. Only the core JNA jar is used; no jna-platform dependency.

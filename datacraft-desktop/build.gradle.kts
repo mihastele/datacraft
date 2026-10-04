@@ -19,6 +19,7 @@ val fxPlatform = when {
 
 dependencies {
     implementation(project(":datacraft-core"))
+    implementation(project(":datacraft-sql"))
     implementation(project(":datacraft-platform"))
     implementation(project(":datacraft-postgresql"))
     implementation(project(":datacraft-sqlite"))

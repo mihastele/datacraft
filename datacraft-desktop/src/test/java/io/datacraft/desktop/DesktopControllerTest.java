@@ -51,10 +51,13 @@ class DesktopControllerTest {
             assertEquals('\0', buffer[0]);
             var pending = controller.query(new QueryRequest("SELECT 1", 1, 1, 1));
             assertTrue(started.await(5, TimeUnit.SECONDS));
+            assertTrue(controller.analyze("SELECT 1", DatabaseKind.POSTGRESQL).get(2, TimeUnit.SECONDS).diagnostics().isEmpty());
+            assertEquals(List.of("public"), controller.metadata().schemas());
             controller.cancel();
             assertThrows(ExecutionException.class, () -> pending.get(5, TimeUnit.SECONDS));
         } finally { controller.shutdown().get(5, TimeUnit.SECONDS); }
         assertTrue(closed.get());
+        assertEquals(io.datacraft.sql.SchemaSnapshot.EMPTY, controller.metadata());
         assertThrows(RejectedExecutionException.class, controller::schemas);
     }
 }

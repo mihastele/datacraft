@@ -1,4 +1,7 @@
 plugins { base }
+tasks.named("check") { dependsOn(":datacraft-platform:check", ":datacraft-sql:check") }
+tasks.named("assemble") { dependsOn(":datacraft-platform:assemble", ":datacraft-sql:assemble") }
+tasks.named("clean") { dependsOn(":datacraft-platform:clean", ":datacraft-sql:clean") }
 
 allprojects {
     group = "io.datacraft"

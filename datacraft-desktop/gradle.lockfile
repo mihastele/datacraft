@@ -5,6 +5,7 @@ com.fasterxml.jackson.core:jackson-annotations:2.20=testCompileClasspath,testRun
 com.github.docker-java:docker-java-api:3.7.1=testCompileClasspath,testRuntimeClasspath
 com.github.docker-java:docker-java-transport-zerodep:3.7.1=testCompileClasspath,testRuntimeClasspath
 com.github.docker-java:docker-java-transport:3.7.1=testCompileClasspath,testRuntimeClasspath
+com.github.jsqlparser:jsqlparser:5.4=runtimeClasspath,testRuntimeClasspath
 commons-codec:commons-codec:1.19.0=testCompileClasspath,testRuntimeClasspath
 commons-io:commons-io:2.20.0=testCompileClasspath,testRuntimeClasspath
 net.java.dev.jna:jna:5.18.1=testCompileClasspath

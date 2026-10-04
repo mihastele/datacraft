@@ -63,6 +63,7 @@ public final class DesktopWindow {
         connectionPane = new ConnectionPane(controller.availableDatabases(), connect, disconnect, selected -> {
             subtitle.setText(selected + "  /  read-only workspace");
             queries.forEach(query -> query.replaceExample(example(selected)));
+            queries.forEach(QueryPane::invalidateAnalysis);
         });
         connectionPane.configureProfiles(controller.profilesAvailable(), controller.canStorePassword(), this::saveProfile, this::deleteProfile);
         subtitle.getStyleClass().add("brand-subtitle");
@@ -165,10 +166,12 @@ public final class DesktopWindow {
             if (runningQuery != null) runningQuery.cancel.setDisable(true);
             status.setText("Cancellation requested…");
         });
+        query.enableSqlSupport(controller, connectionPane::kind);
         query.tab.setOnCloseRequest(event -> {
             if (query == runningQuery || !confirmDiscard(query.dirty())) event.consume();
         });
         query.tab.setOnClosed(event -> {
+            query.close();
             queries.remove(query);
             if (queries.isEmpty()) addQuery();
             else if (activeQuery == query) {
@@ -213,6 +216,7 @@ public final class DesktopWindow {
             char[] buffer = connectionPane.takePassword();
             perform(saved == null ? controller.connect(settings, buffer) : controller.connectProfile(saved, buffer), schemas -> {
                 connected = true;
+                queries.forEach(QueryPane::invalidateAnalysis);
                 badge.setText(settings.environment().name() + "  ·  READ ONLY");
                 badge.pseudoClassStateChanged(CONNECTED, true);
                 badge.pseudoClassStateChanged(PRODUCTION, settings.environment() == Environment.PRODUCTION);
@@ -326,6 +330,7 @@ public final class DesktopWindow {
         connected = false; badge.setText("DISCONNECTED");
         badge.pseudoClassStateChanged(CONNECTED, false); badge.pseudoClassStateChanged(PRODUCTION, false);
         queries.forEach(QueryPane::clearResults);
+        queries.forEach(QueryPane::invalidateAnalysis);
         connectionPane.clearPassword(); explorer.setRoot(null); columns.getItems().clear();
         object.setText("Select a relation to inspect its columns.");
         status.setText("Disconnected. Saved profiles are retained; query text remains in this window.");
@@ -346,6 +351,7 @@ public final class DesktopWindow {
     }
     public CompletableFuture<Void> shutdown() {
         closing = true; root.setDisable(true); status.setText("Closing database connection…");
+        queries.forEach(QueryPane::close);
         connectionPane.clearPassword(); return controller.shutdown();
     }
     public record ExplorerNode(String label, String schema, QualifiedName relation, boolean placeholder) {

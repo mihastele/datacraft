@@ -104,3 +104,10 @@
 .result-summary { -fx-font-size: 11px; -fx-text-fill: #617b8d; }
 .results-placeholder { -fx-font-size: 12px; -fx-text-fill: #617b8d; -fx-padding: 4 8; }
 .tooltip { -fx-background-color: #17364c; -fx-text-fill: #ffffff; -fx-padding: 7 10; -fx-background-radius: 5; }
+.sql-diagnostics { -fx-padding: 4 12; }
+.sql-inspector > .title { -fx-background-color: #f3f7fa; -fx-padding: 6 12; -fx-border-color: #e6edf2; -fx-border-width: 1 0; }
+.sql-inspector > .content { -fx-background-color: #ffffff; -fx-border-color: transparent; }
+.sql-inspector .tree-cell { -fx-font-family: "Consolas", "Monospaced"; -fx-font-size: 11px; -fx-cell-size: 26; -fx-padding: 4 8; }
+.sql-completions { -fx-background-color: #ffffff; -fx-border-color: #087f8c; -fx-font-family: "Consolas", "Monospaced"; -fx-font-size: 12px; }
+.sql-completions .list-cell { -fx-background-color: #ffffff; -fx-text-fill: #334e64; -fx-padding: 6 10; }
+.sql-completions .list-cell:filled:selected { -fx-background-color: #e1f2f1; -fx-text-fill: #096d72; }

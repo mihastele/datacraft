@@ -128,6 +128,7 @@ class DesktopWorkflowTest {
             explorer().getSelectionModel().select(relation); return null;
         });
         await(() -> node("columns", TableView.class).getItems().size() == 2);
+        verifySqlIntelligence("mvp_test.widgets", "sql-intelligence.png");
         fx(() -> {
             node("editor", TextArea.class).setText("SELECT id, label FROM mvp_test.widgets ORDER BY id");
             node("run", Button.class).fire(); return null;
@@ -216,6 +217,7 @@ class DesktopWorkflowTest {
             explorer().getSelectionModel().select(relation); return null;
         });
         await(() -> node("columns", TableView.class).getItems().size() == 2);
+        verifySqlIntelligence("main.widgets", null);
         fx(() -> {
             node("editor", TextArea.class).setText("SELECT id, label FROM widgets ORDER BY id");
             node("run", Button.class).fire(); return null;
@@ -275,6 +277,7 @@ class DesktopWorkflowTest {
                 explorer().getSelectionModel().select(relation); return null;
             });
             await(() -> node("columns", TableView.class).getItems().size() == 4);
+            verifySqlIntelligence("`" + database.database() + "`.`Odd' Table`", null);
             fx(() -> {
                 node("editor", TextArea.class).setText("SELECT id, `Camel Column` FROM `Odd' Table` ORDER BY id");
                 node("run", Button.class).fire(); return null;
@@ -304,8 +307,16 @@ class DesktopWorkflowTest {
             fx(() -> { node("disconnect", Button.class).fire(); return null; });
             await(() -> node("status", Label.class).getText().startsWith("Disconnected."));
             if (kind == DatabaseKind.MARIADB) {
-                fx(() -> { stage.setWidth(980); stage.setHeight(650); return null; });
-                await(() -> stage.getScene().getWidth() < 1000 && stage.getScene().getHeight() < 650);
+                fx(() -> {
+                    stage.setMaximized(false); stage.setIconified(false); stage.setResizable(true);
+                    stage.setWidth(980); stage.setHeight(650); return null;
+                });
+                try { await(() -> stage.getScene().getWidth() < 1000 && stage.getScene().getHeight() < 650); }
+                catch (AssertionError failure) {
+                    String geometry = fx(() -> "Window " + stage.getWidth() + "x" + stage.getHeight()
+                            + "; scene " + stage.getScene().getWidth() + "x" + stage.getScene().getHeight());
+                    fail("Minimum-window resize failed: " + geometry, failure);
+                }
                 fx(() -> { snapshot("minimum-workspace.png"); return null; });
                 fx(() -> { stage.setWidth(1256); stage.setHeight(859); return null; });
             }
@@ -426,12 +437,85 @@ class DesktopWorkflowTest {
                 await(() -> node("status", Label.class).getText().startsWith("Profile saved without"));
                 assertTrue(credentials.read(savedId).isEmpty());
             }
+            fx(() -> {
+                node("profile-name", TextField.class).setText("Renamed PostgreSQL");
+                node("save-profile", Button.class).fire(); return null;
+            });
+            await(() -> node("status", Label.class).getText().startsWith("Profile saved without"));
+            assertEquals("Renamed PostgreSQL", profileService.list().getFirst().name());
+            fx(() -> {
+                Platform.runLater(() -> clickDialog(ButtonType.OK));
+                node("delete-profile", Button.class).fire(); return null;
+            });
+            await(() -> node("status", Label.class).getText().startsWith("Connection profile and"));
+            assertTrue(profileService.list().isEmpty());
+            fx(() -> { assertEquals("", node("profile-name", TextField.class).getText()); return null; });
         } finally {
             fx(window::shutdown).get(15, TimeUnit.SECONDS);
             for (var profile : profileService.list()) profileService.delete(profile.id());
         }
     }
 
+    private static void verifySqlIntelligence(String relation, String screenshot) throws Exception {
+        var query = fx(window::activeQuery);
+        fx(() -> {
+            node("query-tabs", TabPane.class).getSelectionModel().select(query.tab);
+            query.editor.requestFocus();
+            query.editor.setText("SELECT w. FROM " + relation + " w");
+            query.editor.positionCaret(9);
+            query.editor.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.SPACE, false, true, false, false));
+            return null;
+        });
+        await(() -> isShowing(query.sqlSupport.suggestions));
+        fx(() -> {
+            var item = query.sqlSupport.suggestions.getItems().stream().filter(value -> value.label().equals("id")).findFirst().orElseThrow();
+            query.sqlSupport.suggestions.getSelectionModel().select(item);
+            query.editor.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.ENTER, false, false, false, false));
+            assertTrue(query.editor.getText().contains(item.insertText()), "Caret after completion: " + query.editor.getCaretPosition()
+                    + "; SQL: " + query.editor.getText());
+            assertFalse(isShowing(query.sqlSupport.suggestions));
+            return null;
+        });
+        await(() -> query.sqlSupport.diagnostics.getText().startsWith("Parsed"));
+        fx(() -> {
+            assertNotNull(query.sqlSupport.ast.getRoot());
+            var column = findAstColumn(query.sqlSupport.ast.getRoot());
+            assertNotNull(column);
+            query.sqlSupport.inspector.setExpanded(true);
+            query.sqlSupport.ast.getSelectionModel().select(column);
+            assertTrue(query.editor.getSelectedText().startsWith("w."));
+            return null;
+        });
+        await(() -> isShowing(query.sqlSupport.ast) && query.sqlSupport.ast.getHeight() >= 60);
+        fx(() -> {
+            if (screenshot != null) snapshot(screenshot);
+            query.sqlSupport.inspector.setExpanded(false);
+            query.editor.setText("SELECT FROM"); return null;
+        });
+        await(() -> query.sqlSupport.diagnostics.getText().contains("Incomplete SQL"));
+        fx(() -> {
+            query.editor.setText("SELECT w. FROM " + relation + " w"); query.editor.positionCaret(9);
+            query.sqlSupport.requestCompletion(); query.editor.setText("SELECT 42 AS changed");
+            return null;
+        });
+        await(() -> query.sqlSupport.diagnostics.getText().startsWith("Parsed"));
+        fx(() -> { assertFalse(isShowing(query.sqlSupport.suggestions)); assertEquals("SELECT 42 AS changed", query.editor.getText()); return null; });
+        fx(() -> {
+            query.editor.setText("SELECT w.id FROM " + relation + " w"); query.editor.positionCaret(9);
+            query.sqlSupport.requestCompletion(); return null;
+        });
+        await(() -> isShowing(query.sqlSupport.suggestions));
+        fx(() -> {
+            query.editor.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.ENTER, false, true, false, false));
+            assertFalse(isShowing(query.sqlSupport.suggestions)); return null;
+        });
+        await(() -> !query.run.isDisabled() && !query.results.getItems().isEmpty());
+    }
+    private static TreeItem<io.datacraft.sql.SqlAnalysis.AstNode> findAstColumn(TreeItem<io.datacraft.sql.SqlAnalysis.AstNode> item) {
+        if (item.getValue() != null && item.getValue().kind().equals("Column")) return item;
+        for (var child : item.getChildren()) { var found = findAstColumn(child); if (found != null) return found; }
+        return null;
+    }
     private static void clickDialog(ButtonType button) {
         var dialog = javafx.stage.Window.getWindows().stream().filter(javafx.stage.Window::isShowing)
                 .map(w -> w.getScene().getRoot()).filter(DialogPane.class::isInstance)
