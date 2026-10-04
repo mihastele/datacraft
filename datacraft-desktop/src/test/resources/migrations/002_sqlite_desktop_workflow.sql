@@ -1,0 +1,2 @@
+CREATE TABLE widgets(id INTEGER NOT NULL PRIMARY KEY, label TEXT);
+INSERT INTO widgets VALUES (1, 'local SQLite'), (2, NULL);
